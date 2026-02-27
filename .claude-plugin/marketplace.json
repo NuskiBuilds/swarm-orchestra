@@ -1,0 +1,22 @@
+{
+  "name": "swarm-orchestra",
+  "description": "Structured orchestration for Claude Code agent teams",
+  "metadata": {
+    "description": "Structured orchestration for Claude Code agent teams — planning, delegation, and cleanup that actually works."
+  },
+  "owner": {
+    "name": "Nuski"
+  },
+  "plugins": [
+    {
+      "name": "swarm-orchestra",
+      "description": "Structured orchestration for Claude Code agent teams (swarms). Handles planning, spawning, delegation, and cleanup — works for any parallel task.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Nuski"
+      },
+      "source": "./",
+      "category": "development"
+    }
+  ]
+}

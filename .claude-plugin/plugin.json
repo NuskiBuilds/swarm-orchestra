@@ -1,0 +1,10 @@
+{
+  "name": "swarm-orchestra",
+  "version": "1.0.0",
+  "description": "Structured orchestration for Claude Code agent teams (swarms). Handles planning, spawning, delegation, and cleanup — works for any parallel task.",
+  "author": {
+    "name": "Nuski"
+  },
+  "license": "MIT",
+  "keywords": ["swarm", "teams", "parallel-agents", "orchestration", "teamcreate"]
+}

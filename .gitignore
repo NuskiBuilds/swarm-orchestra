@@ -1,0 +1,6 @@
+.DS_Store
+*.swp
+*~
+.claude/*.local.md
+node_modules/
+.env
