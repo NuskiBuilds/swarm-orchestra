@@ -117,33 +117,42 @@ TeamDelete is unreliable. Follow this procedure:
 
 **This is the single most important thing in this plugin.**
 
+In plain language: each teammate can spawn their own helper agents to do research without cluttering their own context window. Reading many files yourself exhausts your context — spawn helpers to investigate and return only the findings you need.
+
 Every teammate prompt MUST include this delegation block (adapt the wording but keep the rules):
 
 ```
 ### How to Work
-To investigate or explore, use the Agent tool to spawn child subagents.
-IMPORTANT: Do NOT pass the team_name parameter — this makes the subagent
-run inside your own process and return results to you directly.
+When you need to investigate files, trace code paths, or research anything:
+spawn helper agents instead of reading everything yourself. Reading many
+files directly fills your context window — helpers investigate and return
+only what matters.
 
-Use subagent_type="general-purpose" for deep analysis.
-Do NOT use subagent_type="Explore" — those are read-only and too shallow.
+Use the Agent tool WITHOUT the team_name parameter. This runs the helper
+inside your own process and returns results directly to you.
 
-Spawn one child subagent per area you need to investigate, then compile
-their findings into your report.
+Rule of thumb: if you need to read 3+ files for something, spawn a helper.
+
+Use subagent_type="general-purpose" — these have full tool access
+(Read, Write, Edit, Bash, Grep, Glob). Do NOT use subagent_type="Explore"
+— those are read-only with no edit or reasoning tools.
 
 NEVER create a new team or use TeamCreate. You are a teammate, not a leader.
 ```
 
-**Why this exists:** Without it, teammates spawn new teammates instead of internal child agents. This creates exponential agent explosion — 12-20+ agents from what should have been 3. The official docs say nested teams aren't supported, but they happen in practice when prompts are ambiguous. This block prevents it.
+**Why this exists:** Without it, teammates try to read everything themselves and exhaust their context, or worse — spawn new teammates instead of internal helpers. This creates exponential agent explosion (12-20+ agents from what should have been 3). The block prevents both failure modes.
 
-### Teammate vs Child Subagent
+### Teammate vs Child Subagent (Helper)
 
-| | Teammate | Child Subagent |
+| | Teammate | Child Subagent (Helper) |
 |---|---|---|
 | Spawned with | Agent tool + `team_name` | Agent tool (no `team_name`) |
 | Runs in | Own pane or in-process | Parent's process |
 | Communication | `SendMessage` | Return value |
-| Use for | Long-running parallel work | Short investigation within a teammate |
+| Tools | Full access | Depends on `subagent_type` |
+| Use for | Long-running parallel work | Investigation, research, deep dives |
+
+**When to spawn a helper:** If you need to read 3+ files, trace a code path, search across modules, or do any investigation that would consume significant context — spawn a `general-purpose` helper and let it return a summary.
 
 ## Pitfalls
 
