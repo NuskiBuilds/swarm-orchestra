@@ -1,6 +1,7 @@
 ---
 name: swarm
 description: This skill should be used when the user asks to "create a swarm", "launch a team", "spin up agents", "use teammates", "run agents in parallel", "implement these in parallel", "research competing approaches", "run a parallel audit", or "split this work across agents". Covers the full lifecycle from team creation through task assignment, teammate management, result collection, and cleanup.
+version: "2.0.0"
 ---
 
 # Swarm Lifecycle
@@ -82,25 +83,51 @@ One task per unit of work, created before spawning teammates:
 TaskCreate({ subject: "Task title", description: "Details...", activeForm: "Working on X" })
 ```
 
-### 3. Spawn Teammates
+### 3. Pre-Swarm Research (when needed)
 
-Spawn **ALL** teammates in a **single message** with multiple Agent tool calls. User keystrokes during spawning corrupt prompts.
+For tasks where agents will **make changes** to code they don't fully understand, consider spawning a single **research agent before spawning the implementation teammates**. Its job: read the components, APIs, or domain each agent will touch and return a context doc that gets included in their prompts.
+
+Without this: agents make assumptions, produce wrong fixes, and you spend a turn on revisions.
+With this: agents understand what they're changing before they change it.
+
+**When to do it:** Implementation tasks (fixing, refactoring, auditing) with >=3 agents working on unfamiliar domains. Skip for pure research/analysis swarms where agents are only reading and summarizing.
+
+### 4. Spawn Teammates
+
+Spawn **ALL** teammates in a **single message** with multiple Agent tool calls.
+User keystrokes during spawning corrupt prompts.
 
 Each teammate needs: `name`, `team_name`, `subagent_type`, `model`, `prompt`, `description`.
-
 For `subagent_type`: check if the project has custom agents in `.claude/agents/` — they carry domain knowledge. Otherwise use `general-purpose`.
 
 **Tell the user not to type until all agents confirm spawned.**
 
-**Every teammate prompt MUST include the delegation block** (see The Rule below). This is non-negotiable.
+Each teammate prompt follows this pattern:
 
-### 4. Manage
+```
+"You are [agent-name]. Use /teammate for your operating protocol.
+ Your task: [specific instructions, include pre-swarm research if applicable]"
+```
+
+The `/teammate` skill handles delegation rules, peer communication, and interrupt handling automatically. Do not manually include these blocks in the prompt.
+
+If using the mailbox system, register agents before spawning:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/swarm-register.sh <name> <team>
+```
+
+Chain all register calls with `&&` in a single Bash command.
+See `references/mailbox-setup.md` for full setup and usage.
+
+### 5. Manage
 
 - **Idle is normal.** Teammates go idle after every turn. Send a message to wake them.
 - **Collect results.** Teammates report via SendMessage. Track which have reported.
 - **Nudge stragglers.** If a teammate goes idle without reporting, send explicit instructions.
+- **Mid-turn corrections:** If you need to course-correct an agent while it's actively working, use the mailbox system — standard SendMessage only delivers at turn boundaries. See `references/mailbox-setup.md` for usage.
 
-### 5. Shutdown and Cleanup
+### 6. Shutdown and Cleanup
 
 TeamDelete is unreliable. Follow this procedure:
 
@@ -113,50 +140,15 @@ TeamDelete is unreliable. Follow this procedure:
 4. Call `TeamDelete()` again to clear session state
 5. Verify: `ls ~/.claude/teams/` — no stale entries
 
-## The Rule
-
-**This is the single most important thing in this plugin.**
-
-In plain language: each teammate can spawn their own helper agents to do research without cluttering their own context window. Reading many files yourself exhausts your context — spawn helpers to investigate and return only the findings you need.
-
-Every teammate prompt MUST include this delegation block (adapt the wording but keep the rules):
-
-```
-### How to Work
-When you need to investigate files, trace code paths, or research anything:
-spawn helper agents instead of reading everything yourself. Reading many
-files directly fills your context window — helpers investigate and return
-only what matters.
-
-Use the Agent tool WITHOUT the team_name parameter. This runs the helper
-inside your own process and returns results directly to you.
-
-Rule of thumb: if you need to read 3+ files for something, spawn a helper.
-
-Use subagent_type="general-purpose" — these have full tool access
-(Read, Write, Edit, Bash, Grep, Glob). Do NOT use subagent_type="Explore"
-— those are read-only with no edit or reasoning tools.
-
-NEVER create a new team or use TeamCreate. You are a teammate, not a leader.
-```
-
-**Why this exists:** Without it, teammates try to read everything themselves and exhaust their context, or worse — spawn new teammates instead of internal helpers. This creates exponential agent explosion (12-20+ agents from what should have been 3). The block prevents both failure modes.
-
-### Teammate vs Child Subagent (Helper)
-
-| | Teammate | Child Subagent (Helper) |
-|---|---|---|
-| Spawned with | Agent tool + `team_name` | Agent tool (no `team_name`) |
-| Runs in | Own pane or in-process | Parent's process |
-| Communication | `SendMessage` | Return value |
-| Tools | Full access | Depends on `subagent_type` |
-| Use for | Long-running parallel work | Investigation, research, deep dives |
-
-**When to spawn a helper:** If you need to read 3+ files, trace a code path, search across modules, or do any investigation that would consume significant context — spawn a `general-purpose` helper and let it return a summary.
-
 ## Pitfalls
 
 - **Keystroke injection:** Spawn all agents in one message. User typing mid-spawn corrupts prompts.
-- **Context exhaustion:** Teammates reading too many files themselves. Delegation block fixes this — they should spawn child subagents for investigation.
-- **Explore subagents:** Never use for deep work. They're read-only with no reasoning tools.
-- **TeamDelete failures:** Always follow the cleanup procedure in step 5 above.
+- **Context exhaustion:** Teammates reading too many files themselves. The `/teammate` skill includes delegation rules to prevent this — they should spawn child subagents for investigation.
+- **Explore subagents:** Read-only — no edit, write, or bash. Fine for searching, not for implementation.
+- **TeamDelete failures:** Always follow the cleanup procedure in step 6 above.
+- **Too many files per agent:** For implementation tasks, more files = more assumptions = more wrong changes. The fix is not a bigger team — it's ensuring each teammate is spawning child subagents for investigation rather than reading everything itself.
+- **Agents confirming success without running tests:** For fix/refactor tasks, require agents to run the relevant tests before reporting complete.
+
+## Reference Files
+
+- **`references/mailbox-setup.md`** — Mailbox setup, agent registration, sending interrupts, and technical notes.

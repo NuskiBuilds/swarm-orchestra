@@ -1,10 +1,12 @@
 # swarm-orchestra
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-v2.1.32+-blueviolet)](https://claude.ai/code)
+[![Version](https://img.shields.io/badge/version-2.0.0-green)](.claude-plugin/plugin.json)
+
 **Structured orchestration for Claude Code agent teams.**
 
-Turn "run these in parallel" into a coordinated swarm — with planning, delegation, and cleanup that actually works.
-
-> TeamCreate is an experimental Claude Code feature. This plugin encodes hard-won patterns for using it effectively, but the underlying API may change.
+Turn "run these in parallel" into a coordinated swarm — with planning, delegation, inter-agent messaging, and cleanup that actually works. Built for anyone using Claude Code who wants parallel agents without the chaos.
 
 ---
 
@@ -23,15 +25,12 @@ This plugin makes it work on the first try.
 
 ## What It Does
 
-One skill fires automatically when you ask for parallel work. It:
+Two skills handle everything automatically:
 
-1. **Plans** — walks you through multiple rounds of questions to understand the task, how to slice it, and what depth you need
-2. **Proposes** — presents a team structure for your explicit approval before anything spawns
-3. **Executes** — creates team, tasks, and teammates with proper delegation rules
-4. **Prevents explosion** — every teammate prompt includes a mandatory delegation block that stops runaway spawning
-5. **Cleans up** — handles shutdown with a force-clean fallback for when TeamDelete inevitably fails
+- **`/swarm`** — invoke it or just ask for parallel work. It plans the team structure, gets your approval, spawns agents, manages their lifecycle, and cleans up when done.
+- **`/teammate`** — loads automatically on each spawned agent. It teaches them how to delegate work, talk to each other, and handle interrupts — without the orchestrator having to spell it all out.
 
-Works for any parallel task — code audits, feature builds, research synthesis, debugging investigations, competitive analysis, or anything that benefits from multiple agents.
+The result: you describe the work, approve a plan, and agents coordinate autonomously.
 
 ## Quick Start
 
@@ -69,9 +68,11 @@ claude plugin install swarm-orchestra
 
 The skill triggers automatically. Claude asks questions, proposes a plan, you approve, agents spawn.
 
-## How the Planning Works
+## How It Works
 
-The planning phase uses structured questions — one concern per round, each answer shaping the next:
+### Planning
+
+The orchestrator walks you through structured questions — one concern per round, each answer shaping the next:
 
 ```
 Round 1:  What's the goal?                    → Code audit
@@ -88,20 +89,30 @@ Proposal: 4 agents — opus
 Shall I proceed?
 ```
 
-A simple task might need 2 rounds. A massive codebase might need 5. Notes you add on any question can override the approach, agent count, or model choice.
+You control the agent count, model choice, and scope. Nothing spawns without your approval.
 
-## The #1 Rule
+### Teammate Self-Configuration
 
-**Teammates must NOT spawn new teammates.** They spawn child subagents instead.
+Each teammate loads the `/teammate` skill automatically on spawn. It gives them:
 
-| | Teammate | Child Subagent |
-|---|---|---|
-| Spawned with | Agent tool + `team_name` | Agent tool (no `team_name`) |
-| Runs in | Own pane / in-process | Parent's process |
-| Communication | `SendMessage` | Return value |
-| Use for | Long-running parallel work | Short investigation within a teammate |
+- **Delegation rules** — spawn lightweight helper agents for research instead of reading everything themselves (prevents context exhaustion)
+- **Peer messaging** — discover other teammates and send them findings mid-task via the mailbox system
+- **Interrupt handling** — receive and respond to urgent messages from peers or the orchestrator
 
-Without this distinction, you get exponential agent explosion. The plugin includes a mandatory delegation block in every teammate prompt to prevent it.
+No prompt engineering required. The orchestrator just says *"Use /teammate for your operating protocol"* and the agent configures itself.
+
+### Inter-Agent Messaging
+
+By default, Claude Code messages only deliver between turns — after an agent finishes working. That's useless for mid-task coordination.
+
+The **mailbox system** fixes this. A `PreToolUse` hook checks for messages before every tool call. When one is waiting, the tool is blocked and the message is injected as mandatory feedback. The agent handles it immediately, then resumes.
+
+This works in all directions:
+- **Orchestrator → teammate** — course-correct an agent mid-task
+- **Teammate → teammate** — share findings directly with the agent who needs them
+- **Idle detection** — if a peer has gone idle, the script tells the sender how to wake them
+
+Teammates discover each other and exchange messages autonomously. No manual routing needed.
 
 ## Display Modes
 
@@ -111,12 +122,13 @@ Without this distinction, you get exponential agent explosion. The plugin includ
 
 ## Lessons Learned (the hard way)
 
-1. **The delegation block is non-negotiable.** Nested teams CAN happen — the docs say they can't, but they do.
+1. **Delegation rules are non-negotiable.** Nested teams CAN happen — the docs say they can't, but they do. The `/teammate` skill enforces this automatically.
 2. **Spawn all agents in ONE message.** Keystrokes during spawning corrupt prompts.
 3. **Start with fewer agents.** 2-3 is often enough. Scale up, not down.
-4. **Never use Explore subagents for deep work.** Read-only, no reasoning tools.
+4. **Explore subagents are read-only.** Fine for searching, but they can't edit, write, or run bash.
 5. **TeamDelete is unreliable.** The plugin includes a force-clean fallback.
 6. **Opus for depth, sonnet for execution.** Match the model to the task.
+7. **Pre-swarm research pays off.** For implementation swarms, spawn a research agent first. Agents making changes without understanding the codebase produce wrong fixes.
 
 ## Project Structure
 
@@ -126,8 +138,21 @@ swarm-orchestra/
 │   ├── plugin.json
 │   └── marketplace.json
 ├── skills/
-│   └── swarm/
-│       └── SKILL.md          ← the entire plugin
+│   ├── swarm/
+│   │   ├── SKILL.md          ← orchestration skill
+│   │   └── references/
+│   │       └── mailbox-setup.md
+│   └── teammate/
+│       ├── SKILL.md          ← teammate self-configuration
+│       └── references/
+│           └── mailbox-comms.md
+├── hooks/
+│   └── mailbox-check.sh      ← PreToolUse hook for mid-turn messaging
+├── scripts/
+│   ├── swarm-register.sh     ← register agent before spawning
+│   ├── swarm-send.sh         ← send message to running agent
+│   ├── swarm-status.sh       ← show active agents + pending messages
+│   └── swarm-cleanup.sh      ← tear down swarm state
 ├── README.md
 └── LICENSE
 ```
@@ -135,6 +160,10 @@ swarm-orchestra/
 ## Contributing
 
 Found a new pattern or pitfall? PRs welcome.
+
+## Note
+
+TeamCreate is an experimental Claude Code feature. This plugin encodes hard-won patterns for using it effectively, but the underlying API may change.
 
 ## License
 
