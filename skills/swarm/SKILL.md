@@ -43,6 +43,8 @@ Model guidance (use in Step 2, not in AskUserQuestion):
 - **sonnet** — implementation, straightforward analysis, most tasks
 - **haiku** — quick lookups, simple checks, lowest cost
 
+The `model` parameter passed at spawn time **overrides** both `CLAUDE_CODE_SUBAGENT_MODEL` and the agent definition's `model` frontmatter. This means you can use a specialized `subagent_type` (e.g., `frontend-ui-specialist` with `model: sonnet` in its frontmatter) but spawn it at `model: "opus"` for complex tasks — the spawn-time model wins. The agent keeps its specialized system prompt and tools; only the model changes.
+
 **AskUserQuestion rules:**
 - One concern per call. Each answer shapes the next question.
 - Adapt options to the user's domain — don't force code terminology on a researcher
@@ -99,6 +101,10 @@ User keystrokes during spawning corrupt prompts.
 
 Each teammate needs: `name`, `team_name`, `subagent_type`, `model`, `prompt`, `description`.
 For `subagent_type`: check if the project has custom agents in `.claude/agents/` — they carry domain knowledge. Otherwise use `general-purpose`.
+
+**Working directory:** Agents MUST spawn in the orchestrator's current working directory. NEVER cd into a subdirectory or specify a child folder. Agents access files using full paths from the project root.
+
+**`mode`:** ALWAYS set `mode: "auto"` on every Agent() call. Without this, each agent prompts the user for every file read/write — with multiple agents running, this is unusable.
 
 **Tell the user not to type until all agents confirm spawned.**
 
